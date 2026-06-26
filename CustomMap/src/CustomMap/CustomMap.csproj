@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.1</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<AssemblyName>YonDev.CustomMap</AssemblyName>
+		<RootNamespace>CustomMap</RootNamespace>
+		<AssemblyTitle>CustomMap</AssemblyTitle>
+		<Version>0.1.0</Version>
+		<Nullable>disable</Nullable>
+		<OutputPath>C:\Users\yonij\AppData\Roaming\com.kesomannen.gale\peak\profiles\modTesting\BepInEx\plugins\YonDev.CustomMap\</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<IsThunderstorePackable>true</IsThunderstorePackable>
+		<ThunderstoreName>CustomMap</ThunderstoreName>
+		<ThunderstoreDescription>TODO: Fill in short mod description at max 250 characters.</ThunderstoreDescription>
+		<ThunderstoreCommunities>peak</ThunderstoreCommunities>
+		<ThunderstoreCategories>mods</ThunderstoreCategories>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ModFile Include="$(TargetPath)" Destination="plugins/" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ThunderstorePackageFile Include="$(SolutionRoot)README.md" />
+		<ThunderstorePackageFile Include="$(SolutionRoot)CHANGELOG.md" />
+		<ThunderstorePackageFile Include="$(SolutionRoot)icon.png" />
+		<ThunderstorePackageFile Include="$(SolutionRoot)LICENSE" />
+		<ThunderstoreDependency Include="BepInEx-BepInExPack_PEAK" Version="5.4.75301" />
+	</ItemGroup>
+
+	<Target Name="CopyAssetBundle" AfterTargets="Build">
+		<Copy SourceFiles="$(MSBuildProjectDirectory)\maps.bundle" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+		<Message Text="Copied maps bundle to $(OutputPath)" Importance="high" />
+	</Target>
+
+</Project>
