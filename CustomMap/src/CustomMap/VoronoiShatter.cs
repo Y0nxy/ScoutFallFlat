@@ -19,7 +19,7 @@ namespace CustomMap
         public float cellInset = 0f;
 
         [Header("Impact")]
-        public float impactThreshold = 5f;
+        public float impactThreshold = 650f;
         public float minExplodeImpulse = 0f;
         public float maxExplodeImpulse = float.PositiveInfinity;
         public float perShardImpulseFraction = 0.3f;
@@ -387,11 +387,12 @@ namespace CustomMap
                 }
 
                 shard.SetActive(false);
-                shard.layer = shardLayer;
+                shard.layer = LayerMask.NameToLayer("Map");
 
                 if (!mf) mf = shard.AddComponent<MeshFilter>();
                 mf.mesh = mesh;
                 if (!mr) mr = shard.AddComponent<MeshRenderer>();
+                shard.AddComponent<RigidBodyStandable>();
                 if (mat) mr.sharedMaterial = mat;
 
                 Vector3 cenLocal = ABTToLocal(cen.x, cen.y, 0f, thinAxis) + col.center;
