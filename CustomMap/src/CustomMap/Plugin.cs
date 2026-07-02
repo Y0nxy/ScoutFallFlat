@@ -167,14 +167,23 @@ namespace ScoutFallFlat
             }
 
             ClearNormalMap();
-            SpawnMapPrefab();
-            Instance.StartCoroutine(WarpToSpawnWhenReady());
+            // Give Unity a single frame frame buffer to clear memory pointers
+            yield return null;
+
+            // 2. CRITICAL: yield return makes this coroutine wait until the map is completely loaded,
+            // materials are set up, and scripts are attached.
+            yield return Instance.StartCoroutine(SpawnMapPrefabAsync());
+
+            /// Give physics and layout engines one frame to settle
+            yield return null;
+
+            yield return Instance.StartCoroutine(WarpToSpawnWhenReady());
         }
 
         // -----------------------------------------------------------------------
         // Load the AssetBundle from disk and instantiate the prefab.
         // -----------------------------------------------------------------------
-        private static void SpawnMapPrefab()
+        private static IEnumerator SpawnMapPrefabAsync()
         {
             string dllDirectory = Path.GetDirectoryName(Instance.Info.Location) ?? ".";
             string bundlePath = Path.Combine(dllDirectory, BundleFileName);
@@ -183,33 +192,33 @@ namespace ScoutFallFlat
             {
                 Log.LogError($"CustomMap: AssetBundle not found at \"{bundlePath}\". " +
                              $"Place \"{BundleFileName}\" next to the plugin DLL.");
-                return;
+                yield break;
             }
 
             if (_loadedBundle == null)
             {
-                _loadedBundle = AssetBundle.LoadFromFile(bundlePath);
+                AssetBundleCreateRequest bundleLoadRequest = AssetBundle.LoadFromFileAsync(bundlePath);
+                yield return bundleLoadRequest;
+                _loadedBundle = bundleLoadRequest.assetBundle;
             }
             AssetBundle bundle = _loadedBundle;
             if (bundle == null)
             {
                 Log.LogError($"CustomMap: Failed to load AssetBundle from \"{bundlePath}\".");
-                return;
+                yield break;
             }
             Log.LogInfo($"CustomMap: AssetBundle contains assets: {string.Join(", ", bundle.GetAllAssetNames())}");
             GameObject prefab = bundle.LoadAsset<GameObject>(Instance.PrefabName);
             if (prefab == null)
             {
-                Log.LogError($"CustomMap: Prefab \"{Instance.PrefabName}\" not found inside the bundle. " +
-                             $"Check the exact asset name.");
-                bundle.Unload(false);
-                return;
+                Log.LogError($"CustomMap: Prefab \"{Instance.PrefabName}\" not found inside the bundle. ");
+                yield break;
             }
             SetupMaterial(prefab);
-            if (prefab.GetComponentInChildren<Collider>() == null)
-            {
-                prefab.AddComponent<BoxCollider>().isTrigger = true;
-            }
+            //if (prefab.GetComponentInChildren<Collider>() == null)
+            //{
+            //    prefab.AddComponent<BoxCollider>().isTrigger = true;
+            //}
 
             GameObject map = Object.Instantiate(prefab, SpawnPosition, SpawnRotation);
             map.name = Instance.PrefabName; // remove "(Clone)" for the duplicate-check above
@@ -267,14 +276,15 @@ namespace ScoutFallFlat
                 }
 
                 Vector3 spawnPos = marker.transform.position + Vector3.up * 1.5f;
-                local.data.sinceGrounded = 0f;
-                local.data.sinceJump = 0f;
+                local.data.sinceGrounded = -15f;
+                local.data.sinceJump = -15f;
                 foreach (Rigidbody rb in local.GetComponentsInChildren<Rigidbody>())
                 {
                     rb.linearVelocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                 }
-                local.WarpPlayerRPC(spawnPos, false);
+                local.WarpPlayerRPC(spawnPos + Vector3.up * 15f, false);
+                local.Fall(1);
                 Log.LogInfo($"CustomMap: Warped local player to \"{marker.name}\" at {spawnPos}.");
                 yield break;
             }
@@ -503,6 +513,11 @@ namespace ScoutFallFlat
             GameObject map = GameObject.Find("Map");
             if (map != null)
             {
+                PhotonView[] viewsInMap = map.GetComponentsInChildren<PhotonView>(true);
+                foreach (PhotonView view in viewsInMap)
+                {
+                    if (view != null) PhotonNetwork.LocalCleanPhotonView(view);
+                }
                 foreach (Transform t in map.transform)
                 {
                     Destroy(t.gameObject);
@@ -550,7 +565,15 @@ namespace ScoutFallFlat
             string nextLevel = Levels[numberInArray];
             Log.LogInfo("Loading Level: " + nextLevel);
             GameObject lastLevel = GameObject.Find(Instance.PrefabName);
-            if (lastLevel != null) Destroy(lastLevel);
+            if (lastLevel != null)
+            {
+                PhotonView[] viewsInMap = lastLevel.GetComponentsInChildren<PhotonView>(true);
+                foreach (PhotonView view in viewsInMap)
+                {
+                    if (view != null) PhotonNetwork.LocalCleanPhotonView(view);
+                }
+                Destroy(lastLevel);
+            }
             Instance.PrefabName = path + nextLevel + ".prefab";
             Instance.StartCoroutine(SpawnMapWhenReady());
         }
