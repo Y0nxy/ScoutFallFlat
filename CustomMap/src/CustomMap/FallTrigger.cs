@@ -26,12 +26,12 @@ namespace ScoutFallFlat
                     {
                         if (!Plugin.AdvanceLevels.Value) Log.LogInfo("Level Beat! Resetting level...");
                         else Log.LogInfo("Last Level! Resetting level...");
-                        Plugin.LoadNextLevel(true);
+                        Plugin.TryLoadLevel();
                         Destroy(gameObject);
                         return;
                     }
                     Log.LogInfo("Level Beat! Trying to load next level...");
-                    Plugin.LoadNextLevel();
+                    Plugin.TryLoadLevel();
                     Destroy(gameObject);
                     return;
                 }

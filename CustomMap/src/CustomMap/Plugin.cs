@@ -8,6 +8,8 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Assertions;
+using UnityEngine.SceneManagement;
+using Zorro.Core;
 
 namespace ScoutFallFlat
 {
@@ -35,7 +37,7 @@ namespace ScoutFallFlat
         private const string path = "Assets/_Maps/Maps/";
         private string PrefabName = path + "Intro.prefab";
         //private const string PrefabName = "Dropper Prefab";
-
+        private static GameObject rpcManager;
         // Far from the vanilla map so your prefab doesn't clip into it.
         // Increase further if the vanilla map is still visible.
         private static readonly Vector3 SpawnPosition = new Vector3(0f, 10f, 0f);
@@ -67,6 +69,14 @@ namespace ScoutFallFlat
                 }
                 Log.LogWarning($"ScoutFallFlat: Map name \"{Level.Value}\" not found in Levels array. Will spawn \"{PrefabName}\".");
             };
+            SceneManager.sceneLoaded += (scene, mode) =>
+            {
+                if (scene.name == "Airport")
+                {
+                    Log.LogInfo($"Airport scene loaded. Reloading PrefabName.");
+                    PrefabName = path + Level.Value + ".prefab";
+                }
+            };
 
             Harmony.CreateAndPatchAll(typeof(SceneWatcher), Id);
             Harmony.CreateAndPatchAll(typeof(CustomRope));
@@ -91,6 +101,13 @@ namespace ScoutFallFlat
             private static void Postfix()
             {
                 if (Instance == null) return;
+                rpcManager = GameObject.Find("GAME");
+                if (rpcManager == null) Log.LogError("GAME object not found in scene. RPCs will not work.");
+                else
+                {
+                    rpcManager?.AddComponent<RPCs>();
+                    rpcManager?.GetComponent<PhotonView>()?.RefreshRpcMonoBehaviourCache();
+                }
                 Instance.StartCoroutine(SpawnMapWhenReady());
             }
             //Hunger patch
@@ -139,8 +156,13 @@ namespace ScoutFallFlat
         // -----------------------------------------------------------------------
         private static IEnumerator SpawnMapWhenReady()
         {
+            if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+            {
+                MapTracker.SendMapName(Instance.PrefabName);
+            }
             // Brief settle — let the scene finish constructing
             yield return new WaitForSeconds(2f);
+            if (!PhotonNetwork.IsMasterClient) Instance.PrefabName = MapTracker.GetMapName();
 
             float timeout = Time.realtimeSinceStartup + 15f;
             while (Time.realtimeSinceStartup < timeout)
@@ -154,7 +176,7 @@ namespace ScoutFallFlat
 
             if (GameObject.Find("Map") == null || GameObject.Find("GAME") == null)
             {
-                Log.LogWarning("CustomMap: timed out waiting for scene objects (Map / GAME). Prefab not spawned.");
+                Log.LogWarning("timed out waiting for scene objects (Map / GAME). Prefab not spawned.");
                 yield break;
             }
 
@@ -162,7 +184,7 @@ namespace ScoutFallFlat
             if (GameObject.Find(Instance.PrefabName + "(Clone)") != null ||
                 GameObject.Find(Instance.PrefabName) != null)
             {
-                Log.LogInfo("CustomMap: prefab already present in scene, skipping spawn.");
+                Log.LogInfo("prefab already present in scene, skipping spawn.");
                 yield break;
             }
 
@@ -190,7 +212,7 @@ namespace ScoutFallFlat
             
             if (!File.Exists(bundlePath))
             {
-                Log.LogError($"CustomMap: AssetBundle not found at \"{bundlePath}\". " +
+                Log.LogError($"AssetBundle not found at \"{bundlePath}\". " +
                              $"Place \"{BundleFileName}\" next to the plugin DLL.");
                 yield break;
             }
@@ -204,14 +226,15 @@ namespace ScoutFallFlat
             AssetBundle bundle = _loadedBundle;
             if (bundle == null)
             {
-                Log.LogError($"CustomMap: Failed to load AssetBundle from \"{bundlePath}\".");
+                Log.LogError($"Failed to load AssetBundle from \"{bundlePath}\".");
                 yield break;
             }
-            Log.LogInfo($"CustomMap: AssetBundle contains assets: {string.Join(", ", bundle.GetAllAssetNames())}");
+            Log.LogInfo($"AssetBundle contains assets: {string.Join(", ", bundle.GetAllAssetNames())}");
+            
             GameObject prefab = bundle.LoadAsset<GameObject>(Instance.PrefabName);
             if (prefab == null)
             {
-                Log.LogError($"CustomMap: Prefab \"{Instance.PrefabName}\" not found inside the bundle. ");
+                Log.LogError($"Prefab \"{Instance.PrefabName}\" not found inside the bundle. ");
                 yield break;
             }
             SetupMaterial(prefab);
@@ -227,7 +250,7 @@ namespace ScoutFallFlat
             //DebugLogRendererState(map);
             ClearSceneFog();
             HideSceneWalls();
-            Log.LogInfo($"CustomMap: Spawned \"{Instance.PrefabName}\" at {SpawnPosition}.");
+            Log.LogInfo($"Spawned \"{Instance.PrefabName}\" at {SpawnPosition}.");
         }
 
         // -----------------------------------------------------------------------
@@ -284,12 +307,12 @@ namespace ScoutFallFlat
                     rb.angularVelocity = Vector3.zero;
                 }
                 local.WarpPlayerRPC(spawnPos + Vector3.up * 15f, false);
-                local.Fall(1);
-                Log.LogInfo($"CustomMap: Warped local player to \"{marker.name}\" at {spawnPos}.");
+                local.Fall(0.25f);
+                Log.LogInfo($"Warped local player to \"{marker.name}\" at {spawnPos}.");
                 yield break;
             }
 
-            Log.LogWarning($"CustomMap: Timed out waiting for SpawnPoint or local character. Player not warped.");
+            Log.LogWarning($"Timed out waiting for SpawnPoint or local character. Player not warped.");
         }
         
         private static Dictionary<string, Shader> PeakShaders
@@ -478,7 +501,7 @@ namespace ScoutFallFlat
                 {
                     if (child.Find("Left") == null || child.Find("Right") == null)
                     {
-                        Log.LogWarning($"CustomMap: AutomaticDoor '{child.name}' is missing 'Left' or 'Right' child. Skipping script attachment.");
+                        Log.LogWarning($"AutomaticDoor '{child.name}' is missing 'Left' or 'Right' child. Skipping script attachment.");
                         continue;
                     }
                     child.gameObject.AddComponent<AutomaticDoor>();
@@ -538,6 +561,22 @@ namespace ScoutFallFlat
             //if (spawnPoints != null) Destroy(spawnPoints);
             //spawnPoints = GameObject.Find("Misc/SpawnPoints (1)");
             //if (spawnPoints != null) Destroy(spawnPoints);
+        }
+        
+        public static void TryLoadLevel(bool resetCurrentLevel = false)
+        {
+            if (PhotonNetwork.InRoom)
+            {
+                if (PhotonNetwork.IsMasterClient)
+                {
+                    rpcManager?.GetComponent<RPCs>()?.MapFinished();
+                }
+                else
+                {
+                    Log.LogInfo("Not master client, sending RPC to master to load next level.");
+                    rpcManager?.GetComponent<RPCs>()?.NotifyMasterFinishedLevel();
+                }
+            }
         }
         public static void LoadNextLevel(bool ResetCurrentLevel = false)
         {
